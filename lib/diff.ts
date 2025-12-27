@@ -24,7 +24,10 @@ export interface DiffResult {
  * Calculate unified diff between two texts
  */
 export function calculateUnifiedDiff(oldText: string, newText: string): DiffResult {
-  const diffs = dmp.diff_main(oldText, newText);
+  // Use diff_linesToChars_ to calculate line-level diff (private method with underscore)
+  const lineChars = (dmp as any).diff_linesToChars_(oldText, newText);
+  const diffs = dmp.diff_main(lineChars.chars1, lineChars.chars2, false);
+  (dmp as any).diff_charsToLines_(diffs, lineChars.lineArray);
   dmp.diff_cleanupSemantic(diffs);
 
   const lines: DiffLine[] = [];
@@ -82,7 +85,10 @@ export function calculateSideBySideDiff(oldText: string, newText: string): {
   left: Array<{ lineNumber: number; content: string; type: 'equal' | 'delete' | 'empty' }>;
   right: Array<{ lineNumber: number; content: string; type: 'equal' | 'insert' | 'empty' }>;
 } {
-  const diffs = dmp.diff_main(oldText, newText);
+  // Use diff_linesToChars_ to calculate line-level diff (private method with underscore)
+  const lineChars = (dmp as any).diff_linesToChars_(oldText, newText);
+  const diffs = dmp.diff_main(lineChars.chars1, lineChars.chars2, false);
+  (dmp as any).diff_charsToLines_(diffs, lineChars.lineArray);
   dmp.diff_cleanupSemantic(diffs);
 
   const left: Array<{ lineNumber: number; content: string; type: 'equal' | 'delete' | 'empty' }> = [];
@@ -149,7 +155,10 @@ export function calculateSideBySideDiff(oldText: string, newText: string): {
  * Calculate inline diff (word-level)
  */
 export function calculateInlineDiff(oldText: string, newText: string): DiffResult {
-  const diffs = dmp.diff_main(oldText, newText);
+  // Use diff_linesToChars_ to calculate line-level diff (private method with underscore)
+  const lineChars = (dmp as any).diff_linesToChars_(oldText, newText);
+  const diffs = dmp.diff_main(lineChars.chars1, lineChars.chars2, false);
+  (dmp as any).diff_charsToLines_(diffs, lineChars.lineArray);
   dmp.diff_cleanupSemantic(diffs);
 
   const lines: DiffLine[] = [];

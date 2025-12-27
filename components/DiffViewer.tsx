@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, memo, useEffect } from 'react';
-import { calculateUnifiedDiff, calculateSideBySideDiff, DiffLine } from '@/lib/diff';
+import { calculateUnifiedDiff, calculateSideBySideDiff, DiffLine, CharDiff } from '@/lib/diff';
 import { useI18n } from '@/hooks/useI18n';
 import { detectLanguageFromContent, Language } from '@/lib/detectLanguage';
 import { loadLanguage, highlightLine, escapeHtml } from '@/lib/syntaxHighlight';
@@ -93,6 +93,37 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
     }
   }, []);
 
+  // Render character-level diffs
+  const renderCharDiffs = useCallback((charDiffs: CharDiff[] | undefined, lineType: 'delete' | 'insert') => {
+    if (!charDiffs) return null;
+    
+    // Filter and render based on line type
+    // For DELETE lines: show only 'delete' and 'equal' types, highlight 'delete'
+    // For INSERT lines: show only 'insert' and 'equal' types, highlight 'insert'
+    const filteredDiffs = lineType === 'delete'
+      ? charDiffs.filter(diff => diff.type !== 'insert')
+      : charDiffs.filter(diff => diff.type !== 'delete');
+    
+    return (
+      <>
+        {filteredDiffs.map((charDiff, idx) => {
+          const escaped = escapeHtml(charDiff.text);
+          const className = 
+            (lineType === 'delete' && charDiff.type === 'delete')
+              ? 'bg-red-300 text-red-900'
+              : (lineType === 'insert' && charDiff.type === 'insert')
+              ? 'bg-green-300 text-green-900'
+              : '';
+          return (
+            <span key={idx} className={className}>
+              {escaped}
+            </span>
+          );
+        })}
+      </>
+    );
+  }, []);
+
   return (
     <div className="w-full">
       <div className="mb-4 flex space-x-2 border-b border-gray-200">
@@ -141,7 +172,8 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
             {viewMode === 'unified' && (
           <div className="font-mono text-sm">
             {unifiedDiff.lines.map((line, index) => {
-              const highlighted = isLanguageLoaded ? highlightLine(line.content, language) : escapeHtml(line.content);
+              const hasCharDiffs = line.charDiffs && line.charDiffs.length > 0;
+              const highlighted = isLanguageLoaded && !hasCharDiffs ? highlightLine(line.content, language) : escapeHtml(line.content);
               return (
                 <div
                   key={`unified-${index}-${line.oldLineNumber || ''}-${line.newLineNumber || ''}`}
@@ -150,10 +182,16 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
                   <span className="px-2 py-1 text-gray-500 select-none">
                     {getLinePrefix(line.type)}
                   </span>
-                  <span 
-                    className="px-2 py-1 flex-1 whitespace-pre-wrap"
-                    dangerouslySetInnerHTML={{ __html: highlighted }}
-                  />
+                  {hasCharDiffs ? (
+                    <span className="px-2 py-1 flex-1 whitespace-pre-wrap">
+                      {renderCharDiffs(line.charDiffs, line.type)}
+                    </span>
+                  ) : (
+                    <span 
+                      className="px-2 py-1 flex-1 whitespace-pre-wrap"
+                      dangerouslySetInnerHTML={{ __html: highlighted }}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -167,7 +205,8 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
                 {t.diff.old}
               </div>
               {sideBySideDiff.left.map((line, index) => {
-                const highlighted = isLanguageLoaded ? highlightLine(line.content, language) : escapeHtml(line.content);
+                const hasCharDiffs = line.charDiffs && line.charDiffs.length > 0;
+                const highlighted = isLanguageLoaded && !hasCharDiffs ? highlightLine(line.content, language) : escapeHtml(line.content);
                 return (
                   <div
                     key={`left-${index}-${line.lineNumber}`}
@@ -182,10 +221,16 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
                     <span className="text-gray-500 select-none mr-2">
                       {line.lineNumber}
                     </span>
-                    <span 
-                      className="whitespace-pre-wrap"
-                      dangerouslySetInnerHTML={{ __html: highlighted }}
-                    />
+                    {hasCharDiffs ? (
+                      <span className="whitespace-pre-wrap">
+                        {renderCharDiffs(line.charDiffs, 'delete')}
+                      </span>
+                    ) : (
+                      <span 
+                        className="whitespace-pre-wrap"
+                        dangerouslySetInnerHTML={{ __html: highlighted }}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -195,7 +240,8 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
                 {t.diff.new}
               </div>
               {sideBySideDiff.right.map((line, index) => {
-                const highlighted = isLanguageLoaded ? highlightLine(line.content, language) : escapeHtml(line.content);
+                const hasCharDiffs = line.charDiffs && line.charDiffs.length > 0;
+                const highlighted = isLanguageLoaded && !hasCharDiffs ? highlightLine(line.content, language) : escapeHtml(line.content);
                 return (
                   <div
                     key={`right-${index}-${line.lineNumber}`}
@@ -210,10 +256,16 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
                     <span className="text-gray-500 select-none mr-2">
                       {line.lineNumber}
                     </span>
-                    <span 
-                      className="whitespace-pre-wrap"
-                      dangerouslySetInnerHTML={{ __html: highlighted }}
-                    />
+                    {hasCharDiffs ? (
+                      <span className="whitespace-pre-wrap">
+                        {renderCharDiffs(line.charDiffs, 'insert')}
+                      </span>
+                    ) : (
+                      <span 
+                        className="whitespace-pre-wrap"
+                        dangerouslySetInnerHTML={{ __html: highlighted }}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -224,7 +276,8 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
         {viewMode === 'inline' && (
           <div className="font-mono text-sm">
             {unifiedDiff.lines.map((line, index) => {
-              const highlighted = isLanguageLoaded ? highlightLine(line.content, language) : escapeHtml(line.content);
+              const hasCharDiffs = line.charDiffs && line.charDiffs.length > 0;
+              const highlighted = isLanguageLoaded && !hasCharDiffs ? highlightLine(line.content, language) : escapeHtml(line.content);
               return (
                 <div
                   key={`inline-${index}-${line.oldLineNumber || ''}-${line.newLineNumber || ''}`}
@@ -236,10 +289,16 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
                   <span className="px-2 py-1 text-gray-500 select-none">
                     {getLinePrefix(line.type)}
                   </span>
-                  <span 
-                    className="px-2 py-1 flex-1 whitespace-pre-wrap"
-                    dangerouslySetInnerHTML={{ __html: highlighted }}
-                  />
+                  {hasCharDiffs ? (
+                    <span className="px-2 py-1 flex-1 whitespace-pre-wrap">
+                      {renderCharDiffs(line.charDiffs, line.type)}
+                    </span>
+                  ) : (
+                    <span 
+                      className="px-2 py-1 flex-1 whitespace-pre-wrap"
+                      dangerouslySetInnerHTML={{ __html: highlighted }}
+                    />
+                  )}
                 </div>
               );
             })}

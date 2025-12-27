@@ -3,6 +3,8 @@
 import { useState, useMemo, useCallback, memo, useEffect } from 'react';
 import { calculateUnifiedDiff, calculateSideBySideDiff, DiffLine } from '@/lib/diff';
 import { useI18n } from '@/hooks/useI18n';
+import { detectLanguageFromContent, Language } from '@/lib/detectLanguage';
+import { loadLanguage, highlightLine, escapeHtml } from '@/lib/syntaxHighlight';
 
 type ViewMode = 'unified' | 'side-by-side' | 'inline';
 
@@ -17,6 +19,26 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
   const [isCalculating, setIsCalculating] = useState(false);
   const [unifiedDiff, setUnifiedDiff] = useState<ReturnType<typeof calculateUnifiedDiff>>({ lines: [], oldText: '', newText: '' });
   const [sideBySideDiff, setSideBySideDiff] = useState<ReturnType<typeof calculateSideBySideDiff>>({ left: [], right: [] });
+  const [language, setLanguage] = useState<Language>('plaintext');
+  const [isLanguageLoaded, setIsLanguageLoaded] = useState(false);
+
+  // Detect language from content
+  useEffect(() => {
+    const detectedLang = detectLanguageFromContent(newText || oldText);
+    setLanguage(detectedLang);
+    setIsLanguageLoaded(false);
+    
+    // Load language component
+    if (detectedLang !== 'plaintext') {
+      loadLanguage(detectedLang).then(() => {
+        setIsLanguageLoaded(true);
+      }).catch(() => {
+        setIsLanguageLoaded(true);
+      });
+    } else {
+      setIsLanguageLoaded(true);
+    }
+  }, [oldText, newText]);
 
   // Calculate unified diff asynchronously
   useEffect(() => {
@@ -118,19 +140,23 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
           <>
             {viewMode === 'unified' && (
           <div className="font-mono text-sm">
-            {unifiedDiff.lines.map((line, index) => (
-              <div
-                key={`unified-${index}-${line.oldLineNumber || ''}-${line.newLineNumber || ''}`}
-                className={`flex ${getLineClass(line.type)}`}
-              >
-                <span className="px-2 py-1 text-gray-500 select-none">
-                  {getLinePrefix(line.type)}
-                </span>
-                <span className="px-2 py-1 flex-1 whitespace-pre-wrap">
-                  {line.content}
-                </span>
-              </div>
-            ))}
+            {unifiedDiff.lines.map((line, index) => {
+              const highlighted = isLanguageLoaded ? highlightLine(line.content, language) : escapeHtml(line.content);
+              return (
+                <div
+                  key={`unified-${index}-${line.oldLineNumber || ''}-${line.newLineNumber || ''}`}
+                  className={`flex ${getLineClass(line.type)}`}
+                >
+                  <span className="px-2 py-1 text-gray-500 select-none">
+                    {getLinePrefix(line.type)}
+                  </span>
+                  <span 
+                    className="px-2 py-1 flex-1 whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: highlighted }}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -140,67 +166,83 @@ const DiffViewer = memo(function DiffViewer({ oldText, newText }: DiffViewerProp
               <div className="bg-gray-100 px-4 py-2 font-semibold text-sm border-b border-gray-300">
                 {t.diff.old}
               </div>
-              {sideBySideDiff.left.map((line, index) => (
-                <div
-                  key={`left-${index}-${line.lineNumber}`}
-                  className={`px-2 py-1 ${
-                    line.type === 'delete'
-                      ? 'bg-red-100 text-red-800'
-                      : line.type === 'empty'
-                      ? 'bg-gray-50'
-                      : 'bg-white text-gray-800'
-                  }`}
-                >
-                  <span className="text-gray-500 select-none mr-2">
-                    {line.lineNumber}
-                  </span>
-                  <span className="whitespace-pre-wrap">{line.content}</span>
-                </div>
-              ))}
+              {sideBySideDiff.left.map((line, index) => {
+                const highlighted = isLanguageLoaded ? highlightLine(line.content, language) : escapeHtml(line.content);
+                return (
+                  <div
+                    key={`left-${index}-${line.lineNumber}`}
+                    className={`px-2 py-1 ${
+                      line.type === 'delete'
+                        ? 'bg-red-100 text-red-800'
+                        : line.type === 'empty'
+                        ? 'bg-gray-50'
+                        : 'bg-white text-gray-800'
+                    }`}
+                  >
+                    <span className="text-gray-500 select-none mr-2">
+                      {line.lineNumber}
+                    </span>
+                    <span 
+                      className="whitespace-pre-wrap"
+                      dangerouslySetInnerHTML={{ __html: highlighted }}
+                    />
+                  </div>
+                );
+              })}
             </div>
             <div>
               <div className="bg-gray-100 px-4 py-2 font-semibold text-sm border-b border-gray-300">
                 {t.diff.new}
               </div>
-              {sideBySideDiff.right.map((line, index) => (
-                <div
-                  key={`right-${index}-${line.lineNumber}`}
-                  className={`px-2 py-1 ${
-                    line.type === 'insert'
-                      ? 'bg-green-100 text-green-800'
-                      : line.type === 'empty'
-                      ? 'bg-gray-50'
-                      : 'bg-white text-gray-800'
-                  }`}
-                >
-                  <span className="text-gray-500 select-none mr-2">
-                    {line.lineNumber}
-                  </span>
-                  <span className="whitespace-pre-wrap">{line.content}</span>
-                </div>
-              ))}
+              {sideBySideDiff.right.map((line, index) => {
+                const highlighted = isLanguageLoaded ? highlightLine(line.content, language) : escapeHtml(line.content);
+                return (
+                  <div
+                    key={`right-${index}-${line.lineNumber}`}
+                    className={`px-2 py-1 ${
+                      line.type === 'insert'
+                        ? 'bg-green-100 text-green-800'
+                        : line.type === 'empty'
+                        ? 'bg-gray-50'
+                        : 'bg-white text-gray-800'
+                    }`}
+                  >
+                    <span className="text-gray-500 select-none mr-2">
+                      {line.lineNumber}
+                    </span>
+                    <span 
+                      className="whitespace-pre-wrap"
+                      dangerouslySetInnerHTML={{ __html: highlighted }}
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
         {viewMode === 'inline' && (
           <div className="font-mono text-sm">
-            {unifiedDiff.lines.map((line, index) => (
-              <div
-                key={`inline-${index}-${line.oldLineNumber || ''}-${line.newLineNumber || ''}`}
-                className={`flex ${getLineClass(line.type)}`}
-              >
-                <span className="px-2 py-1 text-gray-500 select-none">
-                  {line.oldLineNumber || line.newLineNumber || ''}
-                </span>
-                <span className="px-2 py-1 text-gray-500 select-none">
-                  {getLinePrefix(line.type)}
-                </span>
-                <span className="px-2 py-1 flex-1 whitespace-pre-wrap">
-                  {line.content}
-                </span>
-              </div>
-            ))}
+            {unifiedDiff.lines.map((line, index) => {
+              const highlighted = isLanguageLoaded ? highlightLine(line.content, language) : escapeHtml(line.content);
+              return (
+                <div
+                  key={`inline-${index}-${line.oldLineNumber || ''}-${line.newLineNumber || ''}`}
+                  className={`flex ${getLineClass(line.type)}`}
+                >
+                  <span className="px-2 py-1 text-gray-500 select-none">
+                    {line.oldLineNumber || line.newLineNumber || ''}
+                  </span>
+                  <span className="px-2 py-1 text-gray-500 select-none">
+                    {getLinePrefix(line.type)}
+                  </span>
+                  <span 
+                    className="px-2 py-1 flex-1 whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: highlighted }}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
           </>
